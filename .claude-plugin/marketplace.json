@@ -1,12 +1,21 @@
 {
   "name": "opencode",
-  "owner": "schmayterling",
-  "metadata_version": "0.1.0",
-  "description": "OpenCode plugin for Claude Code (delegation and code review)",
+  "owner": {
+    "name": "schmayterling"
+  },
+  "metadata": {
+    "description": "OpenCode plugin for Claude Code (delegation and code review)",
+    "version": "0.1.0"
+  },
   "plugins": [
     {
       "name": "opencode",
-      "path": "./plugins/opencode"
+      "description": "Use OpenCode from Claude Code to review code or delegate tasks.",
+      "version": "0.1.0",
+      "author": {
+        "name": "schmayterling"
+      },
+      "source": "./plugins/opencode"
     }
   ]
 }

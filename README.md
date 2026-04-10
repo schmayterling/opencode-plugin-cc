@@ -28,7 +28,7 @@ claude plugin add opencode-plugin-cc
 or install from source:
 
 ```bash
-git clone https://github.com/0x6d6179/opencode-plugin-cc
+git clone https://github.com/schmayterling/opencode-plugin-cc
 cd opencode-plugin-cc
 claude plugin add .
 ```
