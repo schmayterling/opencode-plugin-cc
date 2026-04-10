@@ -1,6 +1,6 @@
 import { captureCommand } from "./process.mjs";
 
-const SAFE_REF = /^[a-zA-Z0-9_.~\-/]+$/;
+const SAFE_REF = /^[a-zA-Z0-9][a-zA-Z0-9_.~\-/]*$/;
 
 export async function getDiffContent(opts = {}) {
   const args = ["diff"];
