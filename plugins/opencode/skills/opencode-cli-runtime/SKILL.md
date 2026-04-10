@@ -6,24 +6,40 @@ description: Internal helper contract for calling OpenCode from the rescue agent
 
 # opencode cli runtime
 
-the primary helper is:
+## IMPORTANT: exact command format
+
+the ONLY valid command is `task`. there is no `run` subcommand. there is no `--prompt` flag.
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task \
-  [--background] \
-  [--model <model>] \
-  [--agent <name>] \
-  -- <task text>
+node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task -- "the task text here"
+```
+
+with options:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task --model provider/model --agent agent-name -- "the task text here"
+```
+
+## concrete examples
+
+```bash
+# simple task
+node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task -- "Say hi to the user"
+
+# with model
+node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task --model google/gemini-2.5-pro -- "Explain this code"
+
+# with agent
+node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task --agent code-review -- "Review the auth module"
+
+# background
+node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task --background -- "Fix the failing tests"
 ```
 
 ## rules
 
+- the task text MUST come after `--`. everything before `--` is flags, everything after is the prompt.
 - use exactly one `task` invocation per rescue call.
 - if `--model` is not specified, opencode uses its configured default model.
-- if `--agent` is specified, opencode uses that agent. use `/opencode:agents` to list available agents.
-- for `--background` tasks, the companion script spawns a detached worker and returns a job id immediately.
-- for foreground tasks (default), the script blocks until completion and returns output.
-
-## task text
-
-the task text is everything after `--`. pass the user's request as-is, but you may prepend working directory context if helpful.
+- if `--agent` is specified, opencode uses that agent.
+- do NOT use `--prompt`, `--quiet`, `-q`, or any other flags not listed above.
