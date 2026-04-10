@@ -210,6 +210,7 @@ async function handleTask(args) {
       model: { type: "string" },
       agent: { type: "string" },
       session: { type: "string" },
+      "timeout-ms": { type: "string" },
       resume: { type: "boolean", default: false },
       fresh: { type: "boolean", default: false },
       background: { type: "boolean", default: false },
@@ -220,12 +221,13 @@ async function handleTask(args) {
   const taskText = taskParts.join(" ").trim();
   if (!taskText) {
     console.error(
-      "no task text provided. usage: task [--model <model>] [--agent <name>] [--resume|--fresh|--session <id>] -- <task text>",
+      "no task text provided. usage: task [--model <model>] [--agent <name>] [--timeout-ms <ms>] [--resume|--fresh|--session <id>] -- <task text>",
     );
     process.exit(1);
   }
 
   const runOpts = { model: values.model, agent: values.agent };
+  if (values["timeout-ms"]) runOpts.timeout = parseInt(values["timeout-ms"], 10);
   if (values.session) {
     runOpts.session = values.session;
   } else if (values.resume && !values.fresh) {

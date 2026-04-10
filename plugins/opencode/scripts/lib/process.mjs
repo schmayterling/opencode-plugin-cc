@@ -44,26 +44,37 @@ export async function captureCommand(command, args, opts = {}) {
 
 // spawn with live stderr streaming to console, capture stdout
 export function runStreaming(command, args, opts = {}) {
+  const timeout = opts.timeout ?? 600_000;
+
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
-      timeout: opts.timeout ?? 600_000,
     });
+
+    let timer;
+    if (timeout > 0) {
+      timer = setTimeout(() => {
+        child.kill("SIGTERM");
+        reject(new Error(`timed out after ${timeout}ms`));
+      }, timeout);
+    }
 
     const stdoutChunks = [];
     child.stdout.on("data", (chunk) => stdoutChunks.push(chunk));
     child.stderr.on("data", (chunk) => {
-      const line = chunk.toString();
-      // filter out noisy bootstrap logs, surface meaningful progress
       if (opts.onStderr) {
-        opts.onStderr(line);
+        opts.onStderr(chunk.toString());
       } else {
-        process.stderr.write(line);
+        process.stderr.write(chunk);
       }
     });
 
-    child.on("error", reject);
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
     child.on("close", (code) => {
+      clearTimeout(timer);
       const stdout = Buffer.concat(stdoutChunks).toString();
       if (code !== 0) {
         const err = new Error(`command exited with code ${code}`);
