@@ -9,6 +9,8 @@ use [OpenCode](https://opencode.ai) from inside [Claude Code](https://docs.anthr
 | `/opencode:setup` | check opencode installation and auth |
 | `/opencode:review` | run code review on current changes |
 | `/opencode:rescue` | delegate a task to opencode |
+| `/opencode:agents` | list available opencode agents |
+| `/opencode:models` | list available models (optionally by provider) |
 | `/opencode:status` | show running and recent jobs |
 | `/opencode:result` | show output from a completed job |
 | `/opencode:cancel` | cancel a running background job |

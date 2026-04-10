@@ -9,6 +9,8 @@ import {
   getOpenCodeAuthStatus,
   runOpenCode,
   runReview,
+  listAgents,
+  listModels,
 } from "./lib/opencode.mjs";
 import {
   getDiffContent,
@@ -44,6 +46,8 @@ const handlers = {
   status: handleStatus,
   result: handleResult,
   cancel: handleCancel,
+  agents: handleAgents,
+  models: handleModels,
 };
 
 const handler = handlers[subcommand];
@@ -69,13 +73,13 @@ async function enqueueBackgroundJob(command, type, payload, opts = {}) {
     command,
     status: "running",
     model: opts.model,
+    agent: opts.agent,
     created_at: Date.now(),
     session_id: process.env.CLAUDE_SESSION_ID,
   };
   if (command === "task") job.task = payload;
   await saveJob(job);
 
-  // write payload to temp file to avoid ARG_MAX limits
   const payloadPath = join(tmpdir(), `opencode-job-${jobId}.txt`);
   await fsWriteFile(payloadPath, payload);
 
@@ -91,6 +95,7 @@ async function enqueueBackgroundJob(command, type, payload, opts = {}) {
       "--payload-file",
       payloadPath,
       ...(opts.model ? ["--model", opts.model] : []),
+      ...(opts.agent ? ["--agent", opts.agent] : []),
     ],
     { stdio: "ignore", env: { ...process.env } },
   );
@@ -130,6 +135,7 @@ async function handleReview(args) {
       base: { type: "string" },
       scope: { type: "string", default: "auto" },
       model: { type: "string" },
+      agent: { type: "string" },
       background: { type: "boolean", default: false },
     },
     allowPositionals: false,
@@ -151,15 +157,14 @@ async function handleReview(args) {
   }
 
   const diff = diffResult.output;
+  const runOpts = { model: values.model, agent: values.agent };
 
   if (values.background) {
-    await enqueueBackgroundJob("review", "review", diff, {
-      model: values.model,
-    });
+    await enqueueBackgroundJob("review", "review", diff, runOpts);
     return;
   }
 
-  const result = await runReview(diff, { model: values.model });
+  const result = await runReview(diff, runOpts);
   console.log(renderReviewResult(result));
 }
 
@@ -172,6 +177,7 @@ async function handleTask(args) {
     args: flagArgs,
     options: {
       model: { type: "string" },
+      agent: { type: "string" },
       background: { type: "boolean", default: false },
     },
     allowPositionals: true,
@@ -180,19 +186,19 @@ async function handleTask(args) {
   const taskText = taskParts.join(" ").trim();
   if (!taskText) {
     console.error(
-      "no task text provided. usage: task [--model <model>] -- <task text>",
+      "no task text provided. usage: task [--model <model>] [--agent <name>] -- <task text>",
     );
     process.exit(1);
   }
 
+  const runOpts = { model: values.model, agent: values.agent };
+
   if (values.background) {
-    await enqueueBackgroundJob("task", "task", taskText, {
-      model: values.model,
-    });
+    await enqueueBackgroundJob("task", "task", taskText, runOpts);
     return;
   }
 
-  const output = await runOpenCode(taskText, { model: values.model });
+  const output = await runOpenCode(taskText, runOpts);
   console.log(output);
 }
 
@@ -203,6 +209,7 @@ async function handleTaskWorker(args) {
       "job-id": { type: "string" },
       type: { type: "string", default: "task" },
       model: { type: "string" },
+      agent: { type: "string" },
       "payload-file": { type: "string" },
     },
     allowPositionals: true,
@@ -214,7 +221,6 @@ async function handleTaskWorker(args) {
     process.exit(1);
   }
 
-  // read payload from temp file (avoids ARG_MAX), then clean up
   let payload = "";
   const payloadFile = values["payload-file"];
   if (payloadFile) {
@@ -226,12 +232,14 @@ async function handleTaskWorker(args) {
     payload = dashIdx >= 0 ? args.slice(dashIdx + 1).join(" ") : "";
   }
 
+  const runOpts = { model: values.model, agent: values.agent };
+
   try {
     let result;
     if (values.type === "review") {
-      result = await runReview(payload, { model: values.model });
+      result = await runReview(payload, runOpts);
     } else {
-      result = await runOpenCode(payload, { model: values.model });
+      result = await runOpenCode(payload, runOpts);
     }
 
     // check if job was cancelled while we were running
@@ -381,4 +389,35 @@ async function handleCancel(args) {
   job.completed_at = Date.now();
   await saveJob(job);
   console.log(`cancelled job ${jobId}.`);
+}
+
+async function handleAgents() {
+  const result = await listAgents();
+  if (!result.ok) {
+    console.error(`error: ${result.output}`);
+    process.exit(1);
+  }
+  console.log(result.output);
+}
+
+async function handleModels(args) {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      verbose: { type: "boolean", default: false },
+      refresh: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+
+  const result = await listModels({
+    provider: positionals[0],
+    verbose: values.verbose,
+    refresh: values.refresh,
+  });
+  if (!result.ok) {
+    console.error(`error: ${result.output}`);
+    process.exit(1);
+  }
+  console.log(result.output);
 }

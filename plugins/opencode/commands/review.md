@@ -1,7 +1,7 @@
 ---
 name: review
 description: Run OpenCode code review on current changes.
-arguments: "[--background] [--base <ref>] [--model <model>]"
+arguments: "[--background] [--base <ref>] [--model <model>] [--agent <name>]"
 disable_model_invocation: true
 allowed_tools:
   - Read
@@ -24,7 +24,7 @@ run a code review using opencode.
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" review \
-  [--base <ref>] [--model <model>] [--background]
+  [--base <ref>] [--model <model>] [--agent <name>] [--background]
 ```
 
 4. return the output verbatim. do not summarize, reorder, or edit the review findings.

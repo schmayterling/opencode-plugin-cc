@@ -2,7 +2,7 @@
 name: rescue
 description: Delegate investigation, a fix, or follow-up work to OpenCode.
 context: fork
-arguments: "[--background] [--model <model>] [task text]"
+arguments: "[--background] [--model <model>] [--agent <name>] [task text]"
 allowed_tools:
   - Read
   - Glob
@@ -22,7 +22,7 @@ delegate a task to opencode via the `opencode:opencode-rescue` subagent.
 2. forward the task to the `opencode:opencode-rescue` agent using the `task` command:
 
 ```
-task opencode:opencode-rescue [--background] [--model <model>] <task text>
+task opencode:opencode-rescue [--background] [--model <model>] [--agent <name>] <task text>
 ```
 
 3. the subagent handles execution and returns results.

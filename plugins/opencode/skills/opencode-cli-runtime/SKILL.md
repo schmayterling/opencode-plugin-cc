@@ -12,6 +12,7 @@ the primary helper is:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task \
   [--background] \
   [--model <model>] \
+  [--agent <name>] \
   -- <task text>
 ```
 
@@ -19,6 +20,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task \
 
 - use exactly one `task` invocation per rescue call.
 - if `--model` is not specified, opencode uses its configured default model.
+- if `--agent` is specified, opencode uses that agent. use `/opencode:agents` to list available agents.
 - for `--background` tasks, the companion script spawns a detached worker and returns a job id immediately.
 - for foreground tasks (default), the script blocks until completion and returns output.
 

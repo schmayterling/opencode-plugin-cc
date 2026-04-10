@@ -21,10 +21,22 @@ export async function getOpenCodeAuthStatus() {
   return { authenticated: true, output: result.output };
 }
 
+export async function listAgents() {
+  return captureCommand("opencode", ["agent", "list"]);
+}
+
+export async function listModels(opts = {}) {
+  const args = ["models"];
+  if (opts.provider) args.push(opts.provider);
+  if (opts.verbose) args.push("--verbose");
+  if (opts.refresh) args.push("--refresh");
+  return captureCommand("opencode", args);
+}
+
 export async function runOpenCode(prompt, opts = {}) {
   const args = ["run"];
   if (opts.model) args.push("--model", opts.model);
-  args.push("-q");
+  if (opts.agent) args.push("--agent", opts.agent);
   args.push(prompt);
 
   const result = await runCommand("opencode", args, {
