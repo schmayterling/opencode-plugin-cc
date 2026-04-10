@@ -1,14 +1,26 @@
 {
-  "hooks": [
-    {
-      "type": "SessionStart",
-      "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-lifecycle-hook.mjs\" session-start",
-      "timeout_ms": 10000
-    },
-    {
-      "type": "SessionEnd",
-      "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-lifecycle-hook.mjs\" session-end",
-      "timeout_ms": 15000
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-lifecycle-hook.mjs\" session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-lifecycle-hook.mjs\" session-end",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
 }
