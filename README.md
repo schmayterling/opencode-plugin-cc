@@ -27,7 +27,7 @@ use [OpenCode](https://opencode.ai) from inside [Claude Code](https://docs.anthr
 ### from github
 
 ```bash
-claude plugin marketplace add github:schmayterling/opencode-plugin-cc
+claude plugin marketplace add https://github.com/schmayterling/opencode-plugin-cc
 claude plugin install opencode
 ```
 
