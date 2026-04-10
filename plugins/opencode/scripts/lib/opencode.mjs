@@ -14,17 +14,14 @@ export async function getOpenCodeAvailability() {
 }
 
 export async function getOpenCodeAuthStatus() {
-  const result = await captureCommand("opencode", ["auth", "list"], {
-    timeout: 15_000,
-  });
-  if (!result.ok) return { authenticated: false, providers: [] };
+  const [authResult, modelsResult] = await Promise.all([
+    captureCommand("opencode", ["auth", "list"], { timeout: 15_000 }),
+    captureCommand("opencode", ["models"], { timeout: 15_000 }),
+  ]);
 
-  const hasCredentials = result.output.includes("●");
+  if (!authResult.ok) return { authenticated: false, providers: [] };
 
-  // get actual provider slugs from available models (e.g. github-copilot, openai)
-  const modelsResult = await captureCommand("opencode", ["models"], {
-    timeout: 15_000,
-  });
+  const hasCredentials = authResult.output.includes("●");
   const providers = [];
   if (modelsResult.ok) {
     const seen = new Set();
@@ -37,10 +34,7 @@ export async function getOpenCodeAuthStatus() {
     }
   }
 
-  return {
-    authenticated: hasCredentials,
-    providers,
-  };
+  return { authenticated: hasCredentials, providers };
 }
 
 export async function listAgents() {
@@ -77,14 +71,11 @@ export async function runOpenCode(prompt, opts = {}) {
   if (opts.agent) args.push("--agent", opts.agent);
   if (opts.session) args.push("--session", opts.session);
   else if (opts.continue) args.push("--continue");
-  if (opts.fork) args.push("--fork");
-  if (opts.title) args.push("--title", opts.title);
-  args.push(prompt);
+  // -- separates flags from prompt to prevent flag injection
+  args.push("--", prompt);
 
   const result = await runCommand("opencode", args, {
     timeout: opts.timeout ?? 600_000,
-    env: { ...process.env, ...opts.env },
-    cwd: opts.cwd,
   });
 
   return result.stdout;

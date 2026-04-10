@@ -131,3 +131,20 @@ export function renderTaskResult(job) {
     ? job.result
     : JSON.stringify(job.result, null, 2);
 }
+
+export function renderSessionList(sessions) {
+  if (!sessions.length) return "no opencode sessions found.";
+
+  const lines = ["## opencode sessions\n"];
+  lines.push("| id | title | updated |");
+  lines.push("|----|-------|---------|");
+  for (const s of sessions) {
+    const updated = s.time?.updated
+      ? new Date(s.time.updated * 1000).toLocaleString()
+      : "?";
+    const title = (s.title || "untitled").slice(0, 50);
+    const id = s.id.slice(0, 12);
+    lines.push(`| ${id} | ${title} | ${updated} |`);
+  }
+  return lines.join("\n");
+}

@@ -2,8 +2,10 @@
 
 import { parseArgs } from "node:util";
 import { randomUUID } from "node:crypto";
-import { writeFile as fsWriteFile, unlink } from "node:fs/promises";
+import { readFile, unlink, open } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import {
   getOpenCodeAvailability,
   getOpenCodeAuthStatus,
@@ -30,10 +32,9 @@ import {
   renderStatusReport,
   renderJobDetail,
   renderTaskResult,
+  renderSessionList,
 } from "./lib/render.mjs";
 import { spawnDetached } from "./lib/process.mjs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -70,41 +71,64 @@ try {
 
 // --- shared helpers ---
 
-async function enqueueBackgroundJob(command, type, payload, opts = {}) {
+async function writePayloadSecure(jobId, payload) {
+  const path = join(tmpdir(), `opencode-job-${jobId}.txt`);
+  // open with 0o600 to prevent other users from reading
+  const fh = await open(path, "w", 0o600);
+  await fh.writeFile(payload);
+  await fh.close();
+  return path;
+}
+
+async function finalizeJob(jobId, update) {
+  const job = await loadJob(jobId);
+  if (!job) {
+    console.error(`job ${jobId} no longer exists, discarding.`);
+    return;
+  }
+  if (job.status === "cancelled") return;
+  Object.assign(job, update, { completed_at: Date.now() });
+  await saveJob(job);
+}
+
+async function enqueueBackgroundJob(command, payload, opts = {}) {
   const jobId = randomUUID().slice(0, 8);
   const job = {
     id: jobId,
     command,
     status: "running",
-    model: opts.model,
-    agent: opts.agent,
     created_at: Date.now(),
     session_id: process.env.CLAUDE_SESSION_ID,
   };
-  if (command === "task") job.task = payload;
   await saveJob(job);
 
-  const payloadPath = join(tmpdir(), `opencode-job-${jobId}.txt`);
-  await fsWriteFile(payloadPath, payload);
-
-  spawnDetached(
-    "node",
-    [
-      join(__dirname, "opencode-companion.mjs"),
-      "task-worker",
-      "--job-id",
-      jobId,
-      "--type",
-      type,
-      "--payload-file",
-      payloadPath,
-      ...(opts.model ? ["--model", opts.model] : []),
-      ...(opts.agent ? ["--agent", opts.agent] : []),
-      ...(opts.session ? ["--session", opts.session] : []),
-      ...(opts.continue ? ["--resume"] : []),
-    ],
-    { stdio: "ignore", env: { ...process.env } },
-  );
+  let payloadPath;
+  try {
+    payloadPath = await writePayloadSecure(jobId, payload);
+    spawnDetached(
+      "node",
+      [
+        join(__dirname, "opencode-companion.mjs"),
+        "task-worker",
+        "--job-id",
+        jobId,
+        "--type",
+        command,
+        "--payload-file",
+        payloadPath,
+        ...(opts.model ? ["--model", opts.model] : []),
+        ...(opts.agent ? ["--agent", opts.agent] : []),
+        ...(opts.session ? ["--session", opts.session] : []),
+        ...(opts.continue ? ["--resume"] : []),
+      ],
+      { stdio: "ignore", env: { ...process.env } },
+    );
+  } catch (err) {
+    // cleanup on failure: mark job failed and remove temp file
+    await finalizeJob(jobId, { status: "failed", error: err.message });
+    if (payloadPath) await unlink(payloadPath).catch(() => {});
+    throw err;
+  }
 
   console.log(`background ${command} started. job id: ${jobId}`);
   console.log(`use \`/opencode:status ${jobId}\` to check progress.`);
@@ -139,7 +163,6 @@ async function handleReview(args) {
     args,
     options: {
       base: { type: "string" },
-      scope: { type: "string", default: "auto" },
       model: { type: "string" },
       agent: { type: "string" },
       background: { type: "boolean", default: false },
@@ -158,7 +181,9 @@ async function handleReview(args) {
   }
 
   if (!diffResult?.ok || !diffResult.output) {
-    console.log("no changes found to review.");
+    console.log(diffResult?.ok === false && diffResult.output
+      ? `error: ${diffResult.output}`
+      : "no changes found to review.");
     return;
   }
 
@@ -166,7 +191,7 @@ async function handleReview(args) {
   const runOpts = { model: values.model, agent: values.agent };
 
   if (values.background) {
-    await enqueueBackgroundJob("review", "review", diff, runOpts);
+    await enqueueBackgroundJob("review", diff, runOpts);
     return;
   }
 
@@ -201,8 +226,6 @@ async function handleTask(args) {
   }
 
   const runOpts = { model: values.model, agent: values.agent };
-
-  // session resume: explicit --session takes priority, --resume continues last, --fresh forces new
   if (values.session) {
     runOpts.session = values.session;
   } else if (values.resume && !values.fresh) {
@@ -210,7 +233,7 @@ async function handleTask(args) {
   }
 
   if (values.background) {
-    await enqueueBackgroundJob("task", "task", taskText, runOpts);
+    await enqueueBackgroundJob("task", taskText, runOpts);
     return;
   }
 
@@ -242,7 +265,6 @@ async function handleTaskWorker(args) {
   let payload = "";
   const payloadFile = values["payload-file"];
   if (payloadFile) {
-    const { readFile } = await import("node:fs/promises");
     payload = await readFile(payloadFile, "utf8");
     await unlink(payloadFile).catch(() => {});
   } else {
@@ -261,31 +283,9 @@ async function handleTaskWorker(args) {
     } else {
       result = await runOpenCode(payload, runOpts);
     }
-
-    // check if job was cancelled while we were running
-    const job = await loadJob(jobId);
-    if (!job) {
-      console.error(`job ${jobId} no longer exists, discarding result.`);
-      return;
-    }
-    if (job.status === "cancelled") return;
-
-    job.status = "completed";
-    job.result = result;
-    job.completed_at = Date.now();
-    await saveJob(job);
+    await finalizeJob(jobId, { status: "completed", result });
   } catch (err) {
-    const job = await loadJob(jobId);
-    if (!job) {
-      console.error(`job ${jobId} no longer exists, discarding error: ${err.message}`);
-      return;
-    }
-    if (job.status === "cancelled") return;
-
-    job.status = "failed";
-    job.error = err.message;
-    job.completed_at = Date.now();
-    await saveJob(job);
+    await finalizeJob(jobId, { status: "failed", error: err.message });
   }
 }
 
@@ -303,7 +303,7 @@ async function handleStatus(args) {
   const jobId = positionals[0];
 
   if (jobId) {
-    const job = await loadJob(jobId);
+    let job = await loadJob(jobId);
     if (!job) {
       console.log(`job ${jobId} not found.`);
       return;
@@ -325,6 +325,8 @@ async function handleStatus(args) {
         await new Promise((r) => setTimeout(r, 2000));
       }
       console.log(`timeout waiting for job ${jobId}.`);
+      // re-read for fresh state after timeout
+      job = (await loadJob(jobId)) ?? job;
     }
 
     console.log(renderJobDetail(job));
@@ -380,9 +382,7 @@ async function handleCancel(args) {
       return;
     }
     if (running.length === 1) {
-      running[0].status = "cancelled";
-      running[0].completed_at = Date.now();
-      await saveJob(running[0]);
+      await finalizeJob(running[0].id, { status: "cancelled" });
       console.log(`cancelled job ${running[0].id}.`);
       return;
     }
@@ -405,9 +405,7 @@ async function handleCancel(args) {
     return;
   }
 
-  job.status = "cancelled";
-  job.completed_at = Date.now();
-  await saveJob(job);
+  await finalizeJob(jobId, { status: "cancelled" });
   console.log(`cancelled job ${jobId}.`);
 }
 
@@ -441,26 +439,10 @@ async function handleSessions(args) {
   if (values.json) {
     console.log(result.output);
   } else {
-    // parse json and render as table
     try {
       const sessions = JSON.parse(result.output);
-      if (!sessions.length) {
-        console.log("no opencode sessions found.");
-        return;
-      }
-      console.log("## opencode sessions\n");
-      console.log("| id | title | updated |");
-      console.log("|----|-------|---------|");
-      for (const s of sessions) {
-        const updated = s.time?.updated
-          ? new Date(s.time.updated * 1000).toLocaleString()
-          : "?";
-        const title = (s.title || "untitled").slice(0, 50);
-        const id = s.id.slice(0, 12);
-        console.log(`| ${id} | ${title} | ${updated} |`);
-      }
+      console.log(renderSessionList(sessions));
     } catch {
-      // fallback to raw output
       console.log(result.output);
     }
   }

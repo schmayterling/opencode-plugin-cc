@@ -7,11 +7,10 @@ export function spawnDetached(command, args, opts = {}) {
     stdio: opts.stdio ?? "ignore",
   });
   child.unref();
-  return child;
 }
 
 // uses execFile (no shell), safe from injection
-export async function runCommand(command, args, opts = {}) {
+export function runCommand(command, args, opts = {}) {
   return new Promise((resolve, reject) => {
     execFile(
       command,

@@ -1,30 +1,34 @@
 import { readFile, writeFile, readdir, mkdir, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const STATE_DIR_NAME = ".opencode-plugin";
-
-function getStateDir() {
-  const base = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
-  return join(base, STATE_DIR_NAME);
-}
+const JOBS_DIR_NAME = "jobs";
 
 function getJobsDir() {
-  return join(getStateDir(), "jobs");
+  const base = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+  return join(base, STATE_DIR_NAME, JOBS_DIR_NAME);
 }
 
-async function ensureDir(dir) {
-  await mkdir(dir, { recursive: true });
+function safeJobPath(id) {
+  const dir = getJobsDir();
+  const resolved = resolve(dir, `${id}.json`);
+  if (!resolved.startsWith(resolve(dir) + "/")) return null;
+  return resolved;
 }
 
 export async function saveJob(job) {
   const dir = getJobsDir();
-  await ensureDir(dir);
-  await writeFile(join(dir, `${job.id}.json`), JSON.stringify(job, null, 2));
+  await mkdir(dir, { recursive: true });
+  const path = safeJobPath(job.id);
+  if (!path) throw new Error(`invalid job id: ${job.id}`);
+  await writeFile(path, JSON.stringify(job, null, 2));
 }
 
 export async function loadJob(id) {
+  const path = safeJobPath(id);
+  if (!path) return null;
   try {
-    const data = await readFile(join(getJobsDir(), `${id}.json`), "utf8");
+    const data = await readFile(path, "utf8");
     return JSON.parse(data);
   } catch {
     return null;
@@ -33,24 +37,22 @@ export async function loadJob(id) {
 
 export async function listJobs() {
   const dir = getJobsDir();
-  await ensureDir(dir);
-  const files = await readdir(dir);
-  const jobs = [];
-  for (const f of files) {
-    if (!f.endsWith(".json")) continue;
-    try {
-      const data = await readFile(join(dir, f), "utf8");
-      jobs.push(JSON.parse(data));
-    } catch {
-      // skip malformed entries
-    }
-  }
-  return jobs.sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+  await mkdir(dir, { recursive: true });
+  const files = (await readdir(dir)).filter((f) => f.endsWith(".json"));
+  const results = await Promise.allSettled(
+    files.map((f) => readFile(join(dir, f), "utf8").then((d) => JSON.parse(d))),
+  );
+  return results
+    .filter((r) => r.status === "fulfilled")
+    .map((r) => r.value)
+    .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
 }
 
 export async function deleteJob(id) {
+  const path = safeJobPath(id);
+  if (!path) return false;
   try {
-    await unlink(join(getJobsDir(), `${id}.json`));
+    await unlink(path);
     return true;
   } catch {
     return false;
@@ -59,9 +61,8 @@ export async function deleteJob(id) {
 
 export async function cleanSessionJobs(sessionId) {
   const jobs = await listJobs();
-  for (const job of jobs) {
-    if (job.session_id === sessionId && job.status !== "running") {
-      await deleteJob(job.id);
-    }
-  }
+  const toDelete = jobs.filter(
+    (j) => j.session_id === sessionId && j.status !== "running",
+  );
+  await Promise.all(toDelete.map((j) => deleteJob(j.id)));
 }
