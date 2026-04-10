@@ -23,9 +23,13 @@ export function renderSetupReport(report) {
     return lines.join("\n");
   }
 
+  const exampleProvider = report.providers?.[0] ?? "github-copilot";
   lines.push("\n### usage\n");
-  lines.push("models use `provider/model` format (e.g. `github-copilot/claude-sonnet-4.6`).");
-  lines.push("run `/opencode:models` to list available models, or `/opencode:models <provider>` to filter by provider.");
+  lines.push("models use the exact `provider/model` format from `/opencode:models`. the provider slug must match exactly.");
+  lines.push(`your available provider slugs: ${report.providers?.length ? report.providers.map(p => `\`${p}\``).join(", ") : "run `/opencode:models` to see"}`);
+  lines.push(`example: \`--model ${exampleProvider}/claude-sonnet-4.6\``);
+  lines.push("");
+  lines.push("run `/opencode:models` to list all models, `/opencode:models <provider>` to filter.");
   lines.push("run `/opencode:agents` to list available agents.");
   lines.push("");
   lines.push("### quick reference\n");
@@ -34,7 +38,7 @@ export function renderSetupReport(report) {
   lines.push("| `/opencode:rescue <task>` | delegate a task to opencode |");
   lines.push("| `/opencode:review` | review current changes |");
   lines.push("| `/opencode:rescue --resume <task>` | continue the last opencode session |");
-  lines.push("| `/opencode:rescue --model provider/model <task>` | use a specific model |");
+  lines.push(`| \`/opencode:rescue --model ${exampleProvider}/model <task>\` | use a specific model |`);
   lines.push("| `/opencode:sessions` | list recent sessions |");
   lines.push("");
   lines.push("**note**: opencode tasks run in the foreground by default. pass `--background` to run in the background with job tracking. this is different from claude code's ctrl+b, which backgrounds the bash command itself without creating a trackable job.");

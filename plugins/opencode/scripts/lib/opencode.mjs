@@ -19,17 +19,27 @@ export async function getOpenCodeAuthStatus() {
   });
   if (!result.ok) return { authenticated: false, providers: [] };
 
-  // parse provider names from output (lines like "●  GitHub Copilot ...")
+  const hasCredentials = result.output.includes("●");
+
+  // get actual provider slugs from available models (e.g. github-copilot, openai)
+  const modelsResult = await captureCommand("opencode", ["models"], {
+    timeout: 15_000,
+  });
   const providers = [];
-  for (const line of result.output.split("\n")) {
-    const match = line.match(/[●○]\s+(.+?)(?:\s+\x1b|\s{2,}|$)/);
-    if (match) providers.push(match[1].trim());
+  if (modelsResult.ok) {
+    const seen = new Set();
+    for (const line of modelsResult.output.split("\n")) {
+      const slug = line.split("/")[0]?.trim();
+      if (slug && !seen.has(slug)) {
+        seen.add(slug);
+        providers.push(slug);
+      }
+    }
   }
 
   return {
-    authenticated: providers.length > 0,
+    authenticated: hasCredentials,
     providers,
-    output: result.output,
   };
 }
 
