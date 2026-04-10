@@ -101,7 +101,6 @@ export function renderJobDetail(job) {
   const lines = [`## job ${job.id}\n`];
   lines.push(`- **status**: ${job.status}`);
   lines.push(`- **command**: ${job.command}`);
-  if (job.model) lines.push(`- **model**: ${job.model}`);
   lines.push(`- **created**: ${new Date(job.created_at).toISOString()}`);
 
   if (job.result) {

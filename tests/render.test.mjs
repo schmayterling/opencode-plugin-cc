@@ -6,6 +6,7 @@ import {
   renderStatusReport,
   renderJobDetail,
   renderTaskResult,
+  renderSessionList,
 } from "../plugins/opencode/scripts/lib/render.mjs";
 
 describe("renderSetupReport", () => {
@@ -132,5 +133,20 @@ describe("renderTaskResult", () => {
       result: "all done",
     });
     assert.equal(out, "all done");
+  });
+});
+
+describe("renderSessionList", () => {
+  it("handles empty sessions", () => {
+    const out = renderSessionList([]);
+    assert.ok(out.includes("no opencode sessions"));
+  });
+
+  it("renders session table", () => {
+    const out = renderSessionList([
+      { id: "abc123def456", title: "fix auth bug", time: { updated: 1700000000 } },
+    ]);
+    assert.ok(out.includes("abc123def456"));
+    assert.ok(out.includes("fix auth bug"));
   });
 });

@@ -16,11 +16,7 @@ import {
   listSessions,
   getRecentSessions,
 } from "./lib/opencode.mjs";
-import {
-  getDiffContent,
-  getWorkingTreeDiff,
-  getStagedDiff,
-} from "./lib/git.mjs";
+import { getDiffContent } from "./lib/git.mjs";
 import {
   saveJob,
   loadJob,
@@ -34,7 +30,7 @@ import {
   renderTaskResult,
   renderSessionList,
 } from "./lib/render.mjs";
-import { spawnDetached } from "./lib/process.mjs";
+import { spawnDetached, captureCommand } from "./lib/process.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -194,9 +190,9 @@ async function handleReview(args) {
   if (values.base) {
     diffResult = await getDiffContent({ base: values.base });
   } else {
-    diffResult = await getWorkingTreeDiff();
+    diffResult = await captureCommand("git", ["diff", "--no-color"]);
     if (diffResult.ok && !diffResult.output) {
-      diffResult = await getStagedDiff();
+      diffResult = await captureCommand("git", ["diff", "--cached", "--no-color"]);
     }
   }
 
@@ -271,7 +267,7 @@ async function handleTaskWorker(args) {
       resume: { type: "boolean", default: false },
       "payload-file": { type: "string" },
     },
-    allowPositionals: true,
+    allowPositionals: false,
   });
 
   const jobId = values["job-id"];
@@ -280,16 +276,15 @@ async function handleTaskWorker(args) {
     process.exit(1);
   }
 
+  const payloadFile = values["payload-file"];
+  if (!payloadFile) {
+    console.error("--payload-file required");
+    process.exit(1);
+  }
+
   try {
-    let payload = "";
-    const payloadFile = values["payload-file"];
-    if (payloadFile) {
-      payload = await readFile(payloadFile, "utf8");
-      await unlink(payloadFile).catch(() => {});
-    } else {
-      const dashIdx = args.indexOf("--");
-      payload = dashIdx >= 0 ? args.slice(dashIdx + 1).join(" ") : "";
-    }
+    const payload = await readFile(payloadFile, "utf8");
+    await unlink(payloadFile).catch(() => {});
 
     const runOpts = parseRunOpts(values, { quiet: true });
 
@@ -358,18 +353,12 @@ async function handleStatus(args) {
 }
 
 async function handleResult(args) {
-  const { positionals } = parseArgs({
-    args,
-    options: {},
-    allowPositionals: true,
-  });
-
-  const jobId = positionals[0];
+  const jobId = args[0];
   if (!jobId) {
     const jobs = await listJobs();
-    const completed = jobs.find(
-      (j) => j.status === "completed" || j.status === "failed",
-    );
+    const completed = jobs
+      .filter((j) => j.status === "completed" || j.status === "failed")
+      .sort((a, b) => (b.completed_at ?? 0) - (a.completed_at ?? 0))[0];
     if (!completed) {
       console.log("no completed jobs found.");
       return;
@@ -387,13 +376,7 @@ async function handleResult(args) {
 }
 
 async function handleCancel(args) {
-  const { positionals } = parseArgs({
-    args,
-    options: {},
-    allowPositionals: true,
-  });
-
-  const jobId = positionals[0];
+  const jobId = args[0];
   if (!jobId) {
     const jobs = await listJobs();
     const running = jobs.filter((j) => j.status === "running");
