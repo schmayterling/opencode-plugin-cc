@@ -1,7 +1,7 @@
 ---
 name: status
 description: Show running and recent OpenCode jobs.
-arguments: "[job-id] [--wait] [--timeout-ms <ms>] [--all]"
+arguments: "optional: job-id, --wait, --timeout-ms ms, --all"
 disable_model_invocation: true
 allowed_tools:
   - Bash(node *)

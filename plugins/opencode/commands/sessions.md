@@ -1,7 +1,7 @@
 ---
 name: sessions
 description: List recent OpenCode sessions.
-arguments: "[--json] [--count <n>]"
+arguments: "optional: --json, --count n"
 disable_model_invocation: true
 allowed_tools:
   - Bash(node *)

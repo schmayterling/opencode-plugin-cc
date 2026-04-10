@@ -1,7 +1,7 @@
 ---
 name: review
 description: Run OpenCode code review on current changes.
-arguments: "[--background] [--base <ref>] [--model <model>] [--agent <name>]"
+arguments: "optional flags: --background, --base ref, --model provider/model, --agent name"
 disable_model_invocation: true
 allowed_tools:
   - Read

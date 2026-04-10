@@ -1,7 +1,7 @@
 ---
 name: models
 description: List available OpenCode models.
-arguments: "[provider] [--verbose] [--refresh]"
+arguments: "optional: provider, --verbose, --refresh"
 disable_model_invocation: true
 allowed_tools:
   - Bash(node *)
