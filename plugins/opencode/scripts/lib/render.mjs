@@ -4,8 +4,6 @@ export function renderSetupReport(report) {
   lines.push(`- **installed**: ${report.installed ? "yes" : "no"}`);
   if (report.version) lines.push(`- **version**: ${report.version}`);
   lines.push(`- **authenticated**: ${report.authenticated ? "yes" : "no"}`);
-  if (report.provider) lines.push(`- **provider**: ${report.provider}`);
-  if (report.model) lines.push(`- **model**: ${report.model}`);
 
   if (!report.installed) {
     lines.push("\n### installation\n");

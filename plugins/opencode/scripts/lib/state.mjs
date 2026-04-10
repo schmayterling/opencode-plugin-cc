@@ -1,6 +1,5 @@
 import { readFile, writeFile, readdir, mkdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { existsSync } from "node:fs";
 
 const STATE_DIR_NAME = ".opencode-plugin";
 
@@ -14,9 +13,7 @@ function getJobsDir() {
 }
 
 async function ensureDir(dir) {
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true });
-  }
+  await mkdir(dir, { recursive: true });
 }
 
 export async function saveJob(job) {
@@ -66,29 +63,5 @@ export async function cleanSessionJobs(sessionId) {
     if (job.session_id === sessionId && job.status !== "running") {
       await deleteJob(job.id);
     }
-  }
-}
-
-export async function saveConfig(key, value) {
-  const dir = getStateDir();
-  await ensureDir(dir);
-  const configPath = join(dir, "config.json");
-  let config = {};
-  try {
-    config = JSON.parse(await readFile(configPath, "utf8"));
-  } catch {
-    // start fresh
-  }
-  config[key] = value;
-  await writeFile(configPath, JSON.stringify(config, null, 2));
-}
-
-export async function loadConfig(key) {
-  try {
-    const configPath = join(getStateDir(), "config.json");
-    const config = JSON.parse(await readFile(configPath, "utf8"));
-    return config[key];
-  } catch {
-    return undefined;
   }
 }

@@ -4,13 +4,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCHEMA_PATH = join(
-  __dirname,
-  "..",
-  "..",
-  "schemas",
-  "review-output.schema.json",
-);
+const SCHEMA_PATH = join(__dirname, "..", "..", "schemas", "review-output.schema.json");
+const PROMPT_PATH = join(__dirname, "..", "..", "prompts", "review.md");
 
 export async function getOpenCodeAvailability() {
   const result = await captureCommand("opencode", ["--version"]);
@@ -29,7 +24,7 @@ export async function getOpenCodeAuthStatus() {
 export async function runOpenCode(prompt, opts = {}) {
   const args = ["run"];
   if (opts.model) args.push("--model", opts.model);
-  args.push("-q"); // quiet, suppress spinner
+  args.push("-q");
   args.push(prompt);
 
   const result = await runCommand("opencode", args, {
@@ -42,35 +37,39 @@ export async function runOpenCode(prompt, opts = {}) {
 }
 
 export async function runReview(diff, opts = {}) {
-  const schema = await readFile(SCHEMA_PATH, "utf8");
+  const [schema, promptTemplate] = await Promise.all([
+    readFile(SCHEMA_PATH, "utf8"),
+    readFile(PROMPT_PATH, "utf8"),
+  ]);
 
   const prompt = [
-    "you are performing a code review. analyze the following diff and respond with JSON matching this schema:\n",
+    promptTemplate,
+    "\n## output schema\n",
     "```json",
     schema,
     "```\n",
-    "focus on correctness, security, data safety, error handling, and compatibility.",
-    "only report material findings with evidence. no style nits.\n",
     "respond with ONLY the JSON object, no markdown fences, no explanation.\n",
     "---\n",
     diff,
   ].join("\n");
 
   const output = await runOpenCode(prompt, opts);
-  return parseStructuredOutput(output);
+  const parsed = parseStructuredOutput(output);
+  if (!parsed) {
+    throw new Error("review produced malformed output (could not parse JSON)");
+  }
+  return parsed;
 }
 
-export function parseStructuredOutput(raw) {
+function parseStructuredOutput(raw) {
   let text = raw.trim();
 
-  // strip markdown code fences if present
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) text = fenceMatch[1].trim();
 
   try {
     return JSON.parse(text);
   } catch {
-    // try to find a JSON object in the output
     const objMatch = text.match(/\{[\s\S]*\}/);
     if (objMatch) {
       try {

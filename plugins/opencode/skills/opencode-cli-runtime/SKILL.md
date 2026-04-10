@@ -10,16 +10,14 @@ the primary helper is:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task \
-  [--background | --wait] \
+  [--background] \
   [--model <model>] \
-  [--write] \
   -- <task text>
 ```
 
 ## rules
 
 - use exactly one `task` invocation per rescue call.
-- default to `--write` (write-capable) unless the user explicitly asked for read-only analysis.
 - if `--model` is not specified, opencode uses its configured default model.
 - for `--background` tasks, the companion script spawns a detached worker and returns a job id immediately.
 - for foreground tasks (default), the script blocks until completion and returns output.

@@ -17,9 +17,9 @@ export async function runCommand(command, args, opts = {}) {
       command,
       args,
       {
+        ...opts,
         timeout: opts.timeout ?? 120_000,
         maxBuffer: opts.maxBuffer ?? 10 * 1024 * 1024,
-        ...opts,
       },
       (err, stdout, stderr) => {
         if (err) {

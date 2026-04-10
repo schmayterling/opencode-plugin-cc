@@ -17,9 +17,8 @@ make exactly one `Bash` call:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task \
-  [--background | --wait] \
+  [--background] \
   [--model <model>] \
-  [--write] \
   -- <task text>
 ```
 
@@ -27,7 +26,6 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task \
 
 - if the user asked for `--background`, pass it through. otherwise default to foreground (wait).
 - if the user specified `--model`, pass it through. otherwise omit it (use opencode default).
-- default to `--write` (allow file modifications) unless the user explicitly asked for read-only.
 
 ## output
 

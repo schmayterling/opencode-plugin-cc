@@ -2,6 +2,8 @@
 
 import { parseArgs } from "node:util";
 import { randomUUID } from "node:crypto";
+import { writeFile as fsWriteFile, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import {
   getOpenCodeAvailability,
   getOpenCodeAuthStatus,
@@ -58,6 +60,45 @@ try {
   process.exit(1);
 }
 
+// --- shared helpers ---
+
+async function enqueueBackgroundJob(command, type, payload, opts = {}) {
+  const jobId = randomUUID().slice(0, 8);
+  const job = {
+    id: jobId,
+    command,
+    status: "running",
+    model: opts.model,
+    created_at: Date.now(),
+    session_id: process.env.CLAUDE_SESSION_ID,
+  };
+  if (command === "task") job.task = payload;
+  await saveJob(job);
+
+  // write payload to temp file to avoid ARG_MAX limits
+  const payloadPath = join(tmpdir(), `opencode-job-${jobId}.txt`);
+  await fsWriteFile(payloadPath, payload);
+
+  spawnDetached(
+    "node",
+    [
+      join(__dirname, "opencode-companion.mjs"),
+      "task-worker",
+      "--job-id",
+      jobId,
+      "--type",
+      type,
+      "--payload-file",
+      payloadPath,
+      ...(opts.model ? ["--model", opts.model] : []),
+    ],
+    { stdio: "ignore", env: { ...process.env } },
+  );
+
+  console.log(`background ${command} started. job id: ${jobId}`);
+  console.log(`use \`/opencode:status ${jobId}\` to check progress.`);
+}
+
 // --- handlers ---
 
 async function handleSetup(args) {
@@ -90,20 +131,18 @@ async function handleReview(args) {
       scope: { type: "string", default: "auto" },
       model: { type: "string" },
       background: { type: "boolean", default: false },
-      wait: { type: "boolean", default: true },
     },
     allowPositionals: false,
   });
 
   let diffResult;
-  if (values.scope === "working-tree" || values.scope === "auto") {
+  if (values.base) {
+    diffResult = await getDiffContent({ base: values.base });
+  } else {
     diffResult = await getWorkingTreeDiff();
     if (diffResult.ok && !diffResult.output) {
       diffResult = await getStagedDiff();
     }
-  }
-  if (values.base) {
-    diffResult = await getDiffContent({ base: values.base });
   }
 
   if (!diffResult?.ok || !diffResult.output) {
@@ -114,35 +153,9 @@ async function handleReview(args) {
   const diff = diffResult.output;
 
   if (values.background) {
-    const jobId = randomUUID().slice(0, 8);
-    const job = {
-      id: jobId,
-      command: "review",
-      status: "running",
+    await enqueueBackgroundJob("review", "review", diff, {
       model: values.model,
-      created_at: Date.now(),
-      session_id: process.env.CLAUDE_SESSION_ID,
-    };
-    await saveJob(job);
-
-    spawnDetached(
-      "node",
-      [
-        join(__dirname, "opencode-companion.mjs"),
-        "task-worker",
-        "--job-id",
-        jobId,
-        "--type",
-        "review",
-        ...(values.model ? ["--model", values.model] : []),
-        "--",
-        diff,
-      ],
-      { stdio: "ignore", env: { ...process.env } },
-    );
-
-    console.log(`background review started. job id: ${jobId}`);
-    console.log(`use \`/opencode:status ${jobId}\` to check progress.`);
+    });
     return;
   }
 
@@ -160,8 +173,6 @@ async function handleTask(args) {
     options: {
       model: { type: "string" },
       background: { type: "boolean", default: false },
-      wait: { type: "boolean", default: true },
-      write: { type: "boolean", default: true },
     },
     allowPositionals: true,
   });
@@ -175,36 +186,9 @@ async function handleTask(args) {
   }
 
   if (values.background) {
-    const jobId = randomUUID().slice(0, 8);
-    const job = {
-      id: jobId,
-      command: "task",
-      status: "running",
+    await enqueueBackgroundJob("task", "task", taskText, {
       model: values.model,
-      task: taskText,
-      created_at: Date.now(),
-      session_id: process.env.CLAUDE_SESSION_ID,
-    };
-    await saveJob(job);
-
-    spawnDetached(
-      "node",
-      [
-        join(__dirname, "opencode-companion.mjs"),
-        "task-worker",
-        "--job-id",
-        jobId,
-        "--type",
-        "task",
-        ...(values.model ? ["--model", values.model] : []),
-        "--",
-        taskText,
-      ],
-      { stdio: "ignore", env: { ...process.env } },
-    );
-
-    console.log(`background task started. job id: ${jobId}`);
-    console.log(`use \`/opencode:status ${jobId}\` to check progress.`);
+    });
     return;
   }
 
@@ -219,6 +203,7 @@ async function handleTaskWorker(args) {
       "job-id": { type: "string" },
       type: { type: "string", default: "task" },
       model: { type: "string" },
+      "payload-file": { type: "string" },
     },
     allowPositionals: true,
   });
@@ -229,8 +214,17 @@ async function handleTaskWorker(args) {
     process.exit(1);
   }
 
-  const dashIdx = args.indexOf("--");
-  const payload = dashIdx >= 0 ? args.slice(dashIdx + 1).join(" ") : "";
+  // read payload from temp file (avoids ARG_MAX), then clean up
+  let payload = "";
+  const payloadFile = values["payload-file"];
+  if (payloadFile) {
+    const { readFile } = await import("node:fs/promises");
+    payload = await readFile(payloadFile, "utf8");
+    await unlink(payloadFile).catch(() => {});
+  } else {
+    const dashIdx = args.indexOf("--");
+    payload = dashIdx >= 0 ? args.slice(dashIdx + 1).join(" ") : "";
+  }
 
   try {
     let result;
@@ -240,21 +234,30 @@ async function handleTaskWorker(args) {
       result = await runOpenCode(payload, { model: values.model });
     }
 
+    // check if job was cancelled while we were running
     const job = await loadJob(jobId);
-    if (job) {
-      job.status = "completed";
-      job.result = result;
-      job.completed_at = Date.now();
-      await saveJob(job);
+    if (!job) {
+      console.error(`job ${jobId} no longer exists, discarding result.`);
+      return;
     }
+    if (job.status === "cancelled") return;
+
+    job.status = "completed";
+    job.result = result;
+    job.completed_at = Date.now();
+    await saveJob(job);
   } catch (err) {
     const job = await loadJob(jobId);
-    if (job) {
-      job.status = "failed";
-      job.error = err.message;
-      job.completed_at = Date.now();
-      await saveJob(job);
+    if (!job) {
+      console.error(`job ${jobId} no longer exists, discarding error: ${err.message}`);
+      return;
     }
+    if (job.status === "cancelled") return;
+
+    job.status = "failed";
+    job.error = err.message;
+    job.completed_at = Date.now();
+    await saveJob(job);
   }
 }
 
@@ -283,6 +286,10 @@ async function handleStatus(args) {
       const deadline = Date.now() + timeout;
       while (Date.now() < deadline) {
         const current = await loadJob(jobId);
+        if (!current) {
+          console.log(`job ${jobId} was deleted while waiting.`);
+          return;
+        }
         if (current.status !== "running") {
           console.log(renderJobDetail(current));
           return;
