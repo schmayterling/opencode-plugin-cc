@@ -28,16 +28,17 @@ if the user doesn't mention a model, omit the flag (opencode uses its default).
 
 ## session resume
 
-before starting, check for a resumable session:
+default behavior is to start fresh. only resume if the user explicitly asks (e.g. "continue", "resume", "pick up where we left off").
+
+if the user explicitly asks to resume:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" resume-candidate --json
 ```
 
-if a session is found and the user did not say "fresh" or "new":
-- tell the user about the existing session.
-- ask if they want to resume or start fresh.
-- pass `--resume` or `--fresh` accordingly.
+if a session is found, pass `--resume`. if not, tell the user there's nothing to resume.
+
+do NOT check for resume candidates or ask about resuming unless the user explicitly requests it.
 
 ## steps
 
@@ -45,7 +46,7 @@ if a session is found and the user did not say "fresh" or "new":
 2. forward the task to the `opencode:opencode-rescue` agent:
 
 ```
-task opencode:opencode-rescue [--model provider/model] [--agent name] [--resume|--fresh] <task text>
+task opencode:opencode-rescue [--model provider/model] [--agent name] [--resume] <task text>
 ```
 
 3. the subagent handles execution and returns results.
