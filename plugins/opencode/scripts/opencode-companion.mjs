@@ -11,6 +11,8 @@ import {
   runReview,
   listAgents,
   listModels,
+  listSessions,
+  getRecentSessions,
 } from "./lib/opencode.mjs";
 import {
   getDiffContent,
@@ -48,6 +50,8 @@ const handlers = {
   cancel: handleCancel,
   agents: handleAgents,
   models: handleModels,
+  sessions: handleSessions,
+  "resume-candidate": handleResumeCandidate,
 };
 
 const handler = handlers[subcommand];
@@ -96,6 +100,8 @@ async function enqueueBackgroundJob(command, type, payload, opts = {}) {
       payloadPath,
       ...(opts.model ? ["--model", opts.model] : []),
       ...(opts.agent ? ["--agent", opts.agent] : []),
+      ...(opts.session ? ["--session", opts.session] : []),
+      ...(opts.continue ? ["--resume"] : []),
     ],
     { stdio: "ignore", env: { ...process.env } },
   );
@@ -178,6 +184,9 @@ async function handleTask(args) {
     options: {
       model: { type: "string" },
       agent: { type: "string" },
+      session: { type: "string" },
+      resume: { type: "boolean", default: false },
+      fresh: { type: "boolean", default: false },
       background: { type: "boolean", default: false },
     },
     allowPositionals: true,
@@ -186,12 +195,19 @@ async function handleTask(args) {
   const taskText = taskParts.join(" ").trim();
   if (!taskText) {
     console.error(
-      "no task text provided. usage: task [--model <model>] [--agent <name>] -- <task text>",
+      "no task text provided. usage: task [--model <model>] [--agent <name>] [--resume|--fresh|--session <id>] -- <task text>",
     );
     process.exit(1);
   }
 
   const runOpts = { model: values.model, agent: values.agent };
+
+  // session resume: explicit --session takes priority, --resume continues last, --fresh forces new
+  if (values.session) {
+    runOpts.session = values.session;
+  } else if (values.resume && !values.fresh) {
+    runOpts.continue = true;
+  }
 
   if (values.background) {
     await enqueueBackgroundJob("task", "task", taskText, runOpts);
@@ -210,6 +226,8 @@ async function handleTaskWorker(args) {
       type: { type: "string", default: "task" },
       model: { type: "string" },
       agent: { type: "string" },
+      session: { type: "string" },
+      resume: { type: "boolean", default: false },
       "payload-file": { type: "string" },
     },
     allowPositionals: true,
@@ -233,6 +251,8 @@ async function handleTaskWorker(args) {
   }
 
   const runOpts = { model: values.model, agent: values.agent };
+  if (values.session) runOpts.session = values.session;
+  else if (values.resume) runOpts.continue = true;
 
   try {
     let result;
@@ -398,6 +418,87 @@ async function handleAgents() {
     process.exit(1);
   }
   console.log(result.output);
+}
+
+async function handleSessions(args) {
+  const { values } = parseArgs({
+    args,
+    options: {
+      json: { type: "boolean", default: false },
+      count: { type: "string", default: "10" },
+    },
+    allowPositionals: false,
+  });
+
+  const result = await listSessions({
+    maxCount: parseInt(values.count, 10),
+  });
+  if (!result.ok) {
+    console.error(`error: ${result.output}`);
+    process.exit(1);
+  }
+
+  if (values.json) {
+    console.log(result.output);
+  } else {
+    // parse json and render as table
+    try {
+      const sessions = JSON.parse(result.output);
+      if (!sessions.length) {
+        console.log("no opencode sessions found.");
+        return;
+      }
+      console.log("## opencode sessions\n");
+      console.log("| id | title | updated |");
+      console.log("|----|-------|---------|");
+      for (const s of sessions) {
+        const updated = s.time?.updated
+          ? new Date(s.time.updated * 1000).toLocaleString()
+          : "?";
+        const title = (s.title || "untitled").slice(0, 50);
+        const id = s.id.slice(0, 12);
+        console.log(`| ${id} | ${title} | ${updated} |`);
+      }
+    } catch {
+      // fallback to raw output
+      console.log(result.output);
+    }
+  }
+}
+
+async function handleResumeCandidate(args) {
+  const { values } = parseArgs({
+    args,
+    options: { json: { type: "boolean", default: false } },
+    allowPositionals: false,
+  });
+
+  const sessions = await getRecentSessions(5);
+  if (!sessions.length) {
+    if (values.json) {
+      console.log(JSON.stringify({ found: false }));
+    } else {
+      console.log("no recent sessions to resume.");
+    }
+    return;
+  }
+
+  const latest = sessions[0];
+  if (values.json) {
+    console.log(JSON.stringify({
+      found: true,
+      session_id: latest.id,
+      title: latest.title,
+      updated: latest.time?.updated,
+    }));
+  } else {
+    console.log(`resumable session found: ${latest.id}`);
+    console.log(`  title: ${latest.title || "untitled"}`);
+    if (latest.time?.updated) {
+      console.log(`  last active: ${new Date(latest.time.updated * 1000).toLocaleString()}`);
+    }
+    console.log(`\nuse \`--resume\` to continue this session, or \`--fresh\` to start new.`);
+  }
 }
 
 async function handleModels(args) {

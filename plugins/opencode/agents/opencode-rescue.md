@@ -26,6 +26,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task [flags] -- "tas
 - `--model provider/model` (e.g. `--model google/gemini-2.5-pro`)
 - `--agent agent-name`
 - `--background`
+- `--resume` (continue the last opencode session)
+- `--fresh` (force a new session, ignore any existing)
+- `--session <id>` (continue a specific session by id)
 
 ## examples
 
@@ -36,8 +39,14 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task -- "Say hi to t
 # with model
 node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task --model anthropic/claude-sonnet-4-20250514 -- "Fix the auth bug"
 
-# background with agent
-node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task --background --agent code-review -- "Review all changed files"
+# resume last session
+node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task --resume -- "Continue where we left off"
+
+# resume specific session
+node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task --session abc123 -- "Pick up from here"
+
+# force fresh session
+node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task --fresh -- "Start a new investigation"
 ```
 
 ## routing
@@ -45,6 +54,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" task --background --
 - if the user asked for `--background`, pass it through. otherwise default to foreground.
 - if the user specified a model, pass `--model`. otherwise omit.
 - if the user specified an agent, pass `--agent`. otherwise omit.
+- if the user asked to resume, pass `--resume`. if they gave a session id, pass `--session <id>`.
+- if the user asked for fresh, pass `--fresh` (or just omit session flags).
 
 ## output
 

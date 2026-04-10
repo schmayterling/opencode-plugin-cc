@@ -33,10 +33,30 @@ export async function listModels(opts = {}) {
   return captureCommand("opencode", args);
 }
 
+export async function listSessions(opts = {}) {
+  const args = ["session", "list", "--format", "json"];
+  if (opts.maxCount) args.push("-n", String(opts.maxCount));
+  return captureCommand("opencode", args, { timeout: 15_000 });
+}
+
+export async function getRecentSessions(maxCount = 5) {
+  const result = await listSessions({ maxCount });
+  if (!result.ok) return [];
+  try {
+    return JSON.parse(result.output);
+  } catch {
+    return [];
+  }
+}
+
 export async function runOpenCode(prompt, opts = {}) {
   const args = ["run"];
   if (opts.model) args.push("--model", opts.model);
   if (opts.agent) args.push("--agent", opts.agent);
+  if (opts.session) args.push("--session", opts.session);
+  else if (opts.continue) args.push("--continue");
+  if (opts.fork) args.push("--fork");
+  if (opts.title) args.push("--title", opts.title);
   args.push(prompt);
 
   const result = await runCommand("opencode", args, {
