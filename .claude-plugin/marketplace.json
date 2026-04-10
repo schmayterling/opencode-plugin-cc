@@ -1,0 +1,12 @@
+{
+  "name": "opencode",
+  "owner": "0x6d6179",
+  "metadata_version": "0.1.0",
+  "description": "OpenCode plugin for Claude Code (delegation and code review)",
+  "plugins": [
+    {
+      "name": "opencode",
+      "path": "./plugins/opencode"
+    }
+  ]
+}
