@@ -137,6 +137,23 @@ async function enqueueBackgroundJob(command, payload, opts = {}) {
   console.log(`use \`/opencode:status ${jobId}\` to check progress.`);
 }
 
+function parseRunOpts(values, defaults = {}) {
+  const runOpts = { ...defaults, model: values.model, agent: values.agent };
+  if (values["timeout-ms"]) {
+    const ms = parseInt(values["timeout-ms"], 10);
+    if (!Number.isFinite(ms) || ms <= 0 || ms > 3_600_000) {
+      throw new Error("--timeout-ms must be between 1 and 3600000");
+    }
+    runOpts.timeout = ms;
+  }
+  if (values.session) {
+    runOpts.session = values.session;
+  } else if (values.resume && !values.fresh) {
+    runOpts.continue = true;
+  }
+  return runOpts;
+}
+
 // --- handlers ---
 
 async function handleSetup(args) {
@@ -184,9 +201,10 @@ async function handleReview(args) {
   }
 
   if (!diffResult?.ok || !diffResult.output) {
-    console.log(diffResult?.ok === false && diffResult.output
+    const msg = diffResult?.ok === false && diffResult.output
       ? `error: ${diffResult.output}`
-      : "no changes found to review.");
+      : "no changes found to review.";
+    console.error(msg);
     return;
   }
 
@@ -229,20 +247,7 @@ async function handleTask(args) {
     process.exit(1);
   }
 
-  const runOpts = { model: values.model, agent: values.agent };
-  if (values["timeout-ms"]) {
-    const ms = parseInt(values["timeout-ms"], 10);
-    if (!Number.isFinite(ms) || ms <= 0 || ms > 3_600_000) {
-      console.error("--timeout-ms must be between 1 and 3600000");
-      process.exit(1);
-    }
-    runOpts.timeout = ms;
-  }
-  if (values.session) {
-    runOpts.session = values.session;
-  } else if (values.resume && !values.fresh) {
-    runOpts.continue = true;
-  }
+  const runOpts = parseRunOpts(values);
 
   if (values.background) {
     await enqueueBackgroundJob("task", taskText, runOpts);
@@ -286,13 +291,7 @@ async function handleTaskWorker(args) {
       payload = dashIdx >= 0 ? args.slice(dashIdx + 1).join(" ") : "";
     }
 
-    const runOpts = { model: values.model, agent: values.agent, quiet: true };
-    if (values.session) runOpts.session = values.session;
-    else if (values.resume) runOpts.continue = true;
-    if (values["timeout-ms"]) {
-      const ms = parseInt(values["timeout-ms"], 10);
-      if (Number.isFinite(ms) && ms > 0) runOpts.timeout = ms;
-    }
+    const runOpts = parseRunOpts(values, { quiet: true });
 
     let result;
     if (values.type === "review") {

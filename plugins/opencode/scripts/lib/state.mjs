@@ -33,8 +33,9 @@ export async function loadJob(id) {
   try {
     const data = await readFile(path, "utf8");
     return JSON.parse(data);
-  } catch {
-    return null;
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
   }
 }
 
@@ -57,8 +58,9 @@ export async function deleteJob(id) {
   try {
     await unlink(path);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if (err.code === "ENOENT") return false;
+    throw err;
   }
 }
 
