@@ -272,7 +272,7 @@ async function handleTaskWorker(args) {
     payload = dashIdx >= 0 ? args.slice(dashIdx + 1).join(" ") : "";
   }
 
-  const runOpts = { model: values.model, agent: values.agent };
+  const runOpts = { model: values.model, agent: values.agent, quiet: true };
   if (values.session) runOpts.session = values.session;
   else if (values.resume) runOpts.continue = true;
 

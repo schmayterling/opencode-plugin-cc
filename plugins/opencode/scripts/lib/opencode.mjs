@@ -1,4 +1,4 @@
-import { runCommand, captureCommand } from "./process.mjs";
+import { runCommand, captureCommand, runStreaming } from "./process.mjs";
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,11 +71,44 @@ export async function runOpenCode(prompt, opts = {}) {
   if (opts.agent) args.push("--agent", opts.agent);
   if (opts.session) args.push("--session", opts.session);
   else if (opts.continue) args.push("--continue");
+
+  // live progress logs on stderr for foreground runs
+  if (!opts.quiet) {
+    args.push("--print-logs", "--log-level", "INFO");
+  }
+
   // -- separates flags from prompt to prevent flag injection
   args.push("--", prompt);
 
-  const result = await runCommand("opencode", args, {
-    timeout: opts.timeout ?? 600_000,
+  const timeout = opts.timeout ?? 600_000;
+
+  if (opts.quiet) {
+    // background workers: capture only, no streaming
+    const result = await runCommand("opencode", args, { timeout });
+    return result.stdout;
+  }
+
+  // foreground: stream stderr logs to console while capturing stdout
+  // only surface meaningful progress (llm calls, session steps), skip bootstrap noise
+  const result = await runStreaming("opencode", args, {
+    timeout,
+    onStderr: (line) => {
+      for (const segment of line.split("\n")) {
+        const s = segment.trim();
+        if (!s) continue;
+        if (s.includes("service=llm")) {
+          const model = s.match(/modelID=(\S+)/)?.[1] ?? "";
+          const agent = s.match(/agent=([^\s]+)/)?.[1] ?? "";
+          process.stderr.write(`[opencode] calling ${model}${agent ? ` (agent: ${agent})` : ""}\n`);
+        } else if (s.includes("service=session.prompt") && s.includes("loop")) {
+          const step = s.match(/step=(\d+)/)?.[1];
+          if (step) process.stderr.write(`[opencode] step ${step}\n`);
+        } else if (s.includes("service=session ") && s.includes("created")) {
+          const id = s.match(/id=(\S+)/)?.[1] ?? "";
+          process.stderr.write(`[opencode] session ${id}\n`);
+        }
+      }
+    },
   });
 
   return result.stdout;
