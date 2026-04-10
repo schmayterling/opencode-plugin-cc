@@ -17,8 +17,20 @@ export async function getOpenCodeAuthStatus() {
   const result = await captureCommand("opencode", ["auth", "list"], {
     timeout: 15_000,
   });
-  if (!result.ok) return { authenticated: false };
-  return { authenticated: true, output: result.output };
+  if (!result.ok) return { authenticated: false, providers: [] };
+
+  // parse provider names from output (lines like "●  GitHub Copilot ...")
+  const providers = [];
+  for (const line of result.output.split("\n")) {
+    const match = line.match(/[●○]\s+(.+?)(?:\s+\x1b|\s{2,}|$)/);
+    if (match) providers.push(match[1].trim());
+  }
+
+  return {
+    authenticated: providers.length > 0,
+    providers,
+    output: result.output,
+  };
 }
 
 export async function listAgents() {

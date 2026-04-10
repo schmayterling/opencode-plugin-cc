@@ -5,16 +5,39 @@ export function renderSetupReport(report) {
   if (report.version) lines.push(`- **version**: ${report.version}`);
   lines.push(`- **authenticated**: ${report.authenticated ? "yes" : "no"}`);
 
+  if (report.providers?.length) {
+    lines.push(`- **providers**: ${report.providers.join(", ")}`);
+  }
+
   if (!report.installed) {
     lines.push("\n### installation\n");
     lines.push("install opencode: `npm install -g opencode` or `npx opencode`");
     lines.push("or visit https://opencode.ai for other options.");
+    return lines.join("\n");
   }
 
-  if (report.installed && !report.authenticated) {
+  if (!report.authenticated) {
     lines.push("\n### authentication\n");
-    lines.push("run `opencode auth login` to authenticate.");
+    lines.push("run `opencode auth login` to authenticate with a provider.");
+    lines.push("opencode supports 75+ providers: openai, anthropic, google, github-copilot, and more.");
+    return lines.join("\n");
   }
+
+  lines.push("\n### usage\n");
+  lines.push("models use `provider/model` format (e.g. `github-copilot/claude-sonnet-4.6`).");
+  lines.push("run `/opencode:models` to list available models, or `/opencode:models <provider>` to filter by provider.");
+  lines.push("run `/opencode:agents` to list available agents.");
+  lines.push("");
+  lines.push("### quick reference\n");
+  lines.push("| command | description |");
+  lines.push("|---------|-------------|");
+  lines.push("| `/opencode:rescue <task>` | delegate a task to opencode |");
+  lines.push("| `/opencode:review` | review current changes |");
+  lines.push("| `/opencode:rescue --resume <task>` | continue the last opencode session |");
+  lines.push("| `/opencode:rescue --model provider/model <task>` | use a specific model |");
+  lines.push("| `/opencode:sessions` | list recent sessions |");
+  lines.push("");
+  lines.push("**note**: opencode tasks run in the foreground by default. pass `--background` to run in the background with job tracking. this is different from claude code's ctrl+b, which backgrounds the bash command itself without creating a trackable job.");
 
   return lines.join("\n");
 }

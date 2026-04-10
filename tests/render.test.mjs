@@ -9,15 +9,19 @@ import {
 } from "../plugins/opencode/scripts/lib/render.mjs";
 
 describe("renderSetupReport", () => {
-  it("shows installed and authenticated", () => {
+  it("shows installed and authenticated with usage guide", () => {
     const out = renderSetupReport({
       installed: true,
       version: "1.0.0",
       authenticated: true,
+      providers: ["GitHub Copilot"],
     });
     assert.ok(out.includes("**installed**: yes"));
     assert.ok(out.includes("**version**: 1.0.0"));
     assert.ok(out.includes("**authenticated**: yes"));
+    assert.ok(out.includes("**providers**: GitHub Copilot"));
+    assert.ok(out.includes("quick reference"));
+    assert.ok(out.includes("--background"));
   });
 
   it("shows installation instructions when not installed", () => {

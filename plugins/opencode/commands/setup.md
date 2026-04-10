@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Check OpenCode installation and authentication status.
+description: Check OpenCode installation, authentication, and show usage guidance.
 disable_model_invocation: true
 allowed_tools:
   - Bash(node *)
@@ -9,16 +9,18 @@ allowed_tools:
 
 # /opencode:setup
 
-run the setup check:
+check opencode installation, authenticated providers, and show usage guidance.
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/opencode-companion.mjs" setup --json
 ```
 
-report the result to the user verbatim.
+report the result to the user verbatim. it includes:
+- installation status and version
+- authenticated providers (e.g. github copilot, openai, anthropic)
+- model format guide (`provider/model`)
+- quick reference for all commands
+- note about `--background` vs claude code's ctrl+b
 
-if opencode is not installed, suggest installation:
-- `npm install -g opencode` or `npx opencode`
-- visit https://opencode.ai for other options
-
-if not authenticated, suggest running `opencode auth login`.
+if opencode is not installed, suggest installation.
+if not authenticated, suggest `opencode auth login`.
