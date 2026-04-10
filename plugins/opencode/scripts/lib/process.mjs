@@ -49,9 +49,12 @@ export function runStreaming(command, args, opts = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
+      cwd: opts.cwd,
+      env: opts.env,
     });
 
     let timedOut = false;
+    let truncated = false;
     let timer;
     if (timeout > 0) {
       timer = setTimeout(() => {
@@ -65,12 +68,18 @@ export function runStreaming(command, args, opts = {}) {
     const stdoutChunks = [];
     child.stdout.on("data", (chunk) => {
       stdoutLen += chunk.length;
-      if (stdoutLen <= MAX_STDOUT) stdoutChunks.push(chunk);
+      if (stdoutLen <= MAX_STDOUT) {
+        stdoutChunks.push(chunk);
+      } else {
+        truncated = true;
+      }
     });
 
+    let stderrLen = 0;
     const stderrChunks = [];
     child.stderr.on("data", (chunk) => {
-      stderrChunks.push(chunk);
+      stderrLen += chunk.length;
+      if (stderrLen <= MAX_STDOUT) stderrChunks.push(chunk);
       if (opts.onStderr) opts.onStderr(chunk.toString());
     });
 
@@ -81,6 +90,10 @@ export function runStreaming(command, args, opts = {}) {
     child.on("close", (code) => {
       clearTimeout(timer);
       if (timedOut) return;
+      if (truncated) {
+        reject(new Error(`stdout exceeded ${MAX_STDOUT} bytes`));
+        return;
+      }
       const stdout = Buffer.concat(stdoutChunks).toString();
       const stderr = Buffer.concat(stderrChunks).toString();
       if (code !== 0) {
