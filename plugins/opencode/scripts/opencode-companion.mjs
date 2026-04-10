@@ -86,7 +86,7 @@ async function finalizeJob(jobId, update) {
     console.error(`job ${jobId} no longer exists, discarding.`);
     return;
   }
-  if (job.status === "cancelled") return;
+  if (job.status !== "running") return;
   Object.assign(job, update, { completed_at: Date.now() });
   await saveJob(job);
 }

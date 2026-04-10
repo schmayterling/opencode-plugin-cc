@@ -1,4 +1,4 @@
-import { readFile, writeFile, readdir, mkdir, unlink } from "node:fs/promises";
+import { readFile, writeFile, readdir, mkdir, unlink, rename } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 const STATE_DIR_NAME = ".opencode-plugin";
@@ -10,6 +10,7 @@ function getJobsDir() {
 }
 
 function safeJobPath(id) {
+  if (typeof id !== "string" || /[/\\]/.test(id)) return null;
   const dir = getJobsDir();
   const resolved = resolve(dir, `${id}.json`);
   if (!resolved.startsWith(resolve(dir) + "/")) return null;
@@ -21,7 +22,9 @@ export async function saveJob(job) {
   await mkdir(dir, { recursive: true });
   const path = safeJobPath(job.id);
   if (!path) throw new Error(`invalid job id: ${job.id}`);
-  await writeFile(path, JSON.stringify(job, null, 2));
+  const tmp = path + ".tmp";
+  await writeFile(tmp, JSON.stringify(job, null, 2));
+  await rename(tmp, path);
 }
 
 export async function loadJob(id) {
