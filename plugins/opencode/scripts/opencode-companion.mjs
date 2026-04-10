@@ -275,25 +275,25 @@ async function handleTaskWorker(args) {
     process.exit(1);
   }
 
-  let payload = "";
-  const payloadFile = values["payload-file"];
-  if (payloadFile) {
-    payload = await readFile(payloadFile, "utf8");
-    await unlink(payloadFile).catch(() => {});
-  } else {
-    const dashIdx = args.indexOf("--");
-    payload = dashIdx >= 0 ? args.slice(dashIdx + 1).join(" ") : "";
-  }
-
-  const runOpts = { model: values.model, agent: values.agent, quiet: true };
-  if (values.session) runOpts.session = values.session;
-  else if (values.resume) runOpts.continue = true;
-  if (values["timeout-ms"]) {
-    const ms = parseInt(values["timeout-ms"], 10);
-    if (Number.isFinite(ms) && ms > 0) runOpts.timeout = ms;
-  }
-
   try {
+    let payload = "";
+    const payloadFile = values["payload-file"];
+    if (payloadFile) {
+      payload = await readFile(payloadFile, "utf8");
+      await unlink(payloadFile).catch(() => {});
+    } else {
+      const dashIdx = args.indexOf("--");
+      payload = dashIdx >= 0 ? args.slice(dashIdx + 1).join(" ") : "";
+    }
+
+    const runOpts = { model: values.model, agent: values.agent, quiet: true };
+    if (values.session) runOpts.session = values.session;
+    else if (values.resume) runOpts.continue = true;
+    if (values["timeout-ms"]) {
+      const ms = parseInt(values["timeout-ms"], 10);
+      if (Number.isFinite(ms) && ms > 0) runOpts.timeout = ms;
+    }
+
     let result;
     if (values.type === "review") {
       result = await runReview(payload, runOpts);
@@ -329,7 +329,9 @@ async function handleStatus(args) {
     if (values.wait && job.status === "running") {
       const timeout = parseInt(values["timeout-ms"], 10);
       const deadline = Date.now() + timeout;
-      while (Date.now() < deadline) {
+      while (true) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if (Date.now() >= deadline) break;
         const current = await loadJob(jobId);
         if (!current) {
           console.log(`job ${jobId} was deleted while waiting.`);
@@ -339,10 +341,8 @@ async function handleStatus(args) {
           console.log(renderJobDetail(current));
           return;
         }
-        await new Promise((r) => setTimeout(r, 2000));
       }
       console.log(`timeout waiting for job ${jobId}.`);
-      // re-read for fresh state after timeout
       job = (await loadJob(jobId)) ?? job;
     }
 
