@@ -65,46 +65,49 @@ export async function getRecentSessions(maxCount = 5) {
   }
 }
 
+const sanitize = (s) => s.replace(/[^\x20-\x7E]/g, "");
+
+const RE_MODEL = /modelID=(\S+)/;
+const RE_AGENT = /agent=([^\s]+)/;
+const RE_STEP = /step=(\d+)/;
+const RE_SESSION_ID = /id=(\S+)/;
+
 export async function runOpenCode(prompt, opts = {}) {
   const args = ["run"];
   if (opts.model) args.push("--model", opts.model);
   if (opts.agent) args.push("--agent", opts.agent);
   if (opts.session) args.push("--session", opts.session);
   else if (opts.continue) args.push("--continue");
-
-  // live progress logs on stderr for foreground runs
-  if (!opts.quiet) {
-    args.push("--print-logs", "--log-level", "INFO");
-  }
-
-  // -- separates flags from prompt to prevent flag injection
-  args.push("--", prompt);
-
   const timeout = opts.timeout ?? 600_000;
 
   if (opts.quiet) {
-    // background workers: capture only, no streaming
+    args.push("--", prompt);
     const result = await runCommand("opencode", args, { timeout });
     return result.stdout;
   }
 
-  // foreground: stream stderr logs to console while capturing stdout
-  // only surface meaningful progress (llm calls, session steps), skip bootstrap noise
+  args.push("--print-logs", "--log-level", "INFO", "--", prompt);
+
+  // line buffer for stderr chunks (data events are not line-aligned)
+  let buf = "";
   const result = await runStreaming("opencode", args, {
     timeout,
-    onStderr: (line) => {
-      for (const segment of line.split("\n")) {
-        const s = segment.trim();
-        if (!s) continue;
-        if (s.includes("service=llm")) {
-          const model = s.match(/modelID=(\S+)/)?.[1] ?? "";
-          const agent = s.match(/agent=([^\s]+)/)?.[1] ?? "";
+    onStderr: (chunk) => {
+      buf += chunk;
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const s of lines) {
+        const trimmed = s.trim();
+        if (!trimmed) continue;
+        if (trimmed.includes("service=llm")) {
+          const model = sanitize(trimmed.match(RE_MODEL)?.[1] ?? "");
+          const agent = sanitize(trimmed.match(RE_AGENT)?.[1] ?? "");
           process.stderr.write(`[opencode] calling ${model}${agent ? ` (agent: ${agent})` : ""}\n`);
-        } else if (s.includes("service=session.prompt") && s.includes("loop")) {
-          const step = s.match(/step=(\d+)/)?.[1];
+        } else if (trimmed.includes("service=session.prompt") && trimmed.includes("loop")) {
+          const step = trimmed.match(RE_STEP)?.[1];
           if (step) process.stderr.write(`[opencode] step ${step}\n`);
-        } else if (s.includes("service=session ") && s.includes("created")) {
-          const id = s.match(/id=(\S+)/)?.[1] ?? "";
+        } else if (trimmed.includes("service=session ") && trimmed.includes("created")) {
+          const id = sanitize(trimmed.match(RE_SESSION_ID)?.[1] ?? "");
           process.stderr.write(`[opencode] session ${id}\n`);
         }
       }

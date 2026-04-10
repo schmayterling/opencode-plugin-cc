@@ -120,6 +120,7 @@ async function enqueueBackgroundJob(command, payload, opts = {}) {
         ...(opts.agent ? ["--agent", opts.agent] : []),
         ...(opts.session ? ["--session", opts.session] : []),
         ...(opts.continue ? ["--resume"] : []),
+        ...(opts.timeout ? ["--timeout-ms", String(opts.timeout)] : []),
       ],
       { stdio: "ignore", env: { ...process.env } },
     );
@@ -227,7 +228,14 @@ async function handleTask(args) {
   }
 
   const runOpts = { model: values.model, agent: values.agent };
-  if (values["timeout-ms"]) runOpts.timeout = parseInt(values["timeout-ms"], 10);
+  if (values["timeout-ms"]) {
+    const ms = parseInt(values["timeout-ms"], 10);
+    if (!Number.isFinite(ms) || ms <= 0 || ms > 3_600_000) {
+      console.error("--timeout-ms must be between 1 and 3600000");
+      process.exit(1);
+    }
+    runOpts.timeout = ms;
+  }
   if (values.session) {
     runOpts.session = values.session;
   } else if (values.resume && !values.fresh) {
@@ -252,6 +260,7 @@ async function handleTaskWorker(args) {
       model: { type: "string" },
       agent: { type: "string" },
       session: { type: "string" },
+      "timeout-ms": { type: "string" },
       resume: { type: "boolean", default: false },
       "payload-file": { type: "string" },
     },
@@ -277,6 +286,10 @@ async function handleTaskWorker(args) {
   const runOpts = { model: values.model, agent: values.agent, quiet: true };
   if (values.session) runOpts.session = values.session;
   else if (values.resume) runOpts.continue = true;
+  if (values["timeout-ms"]) {
+    const ms = parseInt(values["timeout-ms"], 10);
+    if (Number.isFinite(ms) && ms > 0) runOpts.timeout = ms;
+  }
 
   try {
     let result;
@@ -365,6 +378,10 @@ async function handleResult(args) {
   }
 
   const job = await loadJob(jobId);
+  if (!job) {
+    console.log(`job ${jobId} not found.`);
+    return;
+  }
   console.log(renderTaskResult(job));
 }
 
