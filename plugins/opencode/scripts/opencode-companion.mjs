@@ -73,10 +73,12 @@ try {
 
 async function writePayloadSecure(jobId, payload) {
   const path = join(tmpdir(), `opencode-job-${jobId}.txt`);
-  // open with 0o600 to prevent other users from reading
-  const fh = await open(path, "w", 0o600);
-  await fh.writeFile(payload);
-  await fh.close();
+  const fh = await open(path, "wx", 0o600);
+  try {
+    await fh.writeFile(payload);
+  } finally {
+    await fh.close();
+  }
   return path;
 }
 
